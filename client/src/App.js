@@ -13,17 +13,41 @@ const App = () => {
   const [users, setUsers] = useState([])
   const [currentUser, setCurrentUser] = useState(initialFormState)
   const [editing, setEditing] = useState(false)
+  //to manage error message
+  const [message, setMessage] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setMessage(null)
+    }, 3000)
+    
+    return () => clearInterval(timer)
+  }, [message])
 
   useEffect(() => {
     fetchUsers();
   }, [])
 
   const fetchUsers = async () => {
-    const result = await fetch(`http://localhost:8080/users`)
-    result
-      .json()
-      .then(result => setUsers(result))
-      .catch(e => console.log(e))
+    setLoading(true)
+    try {
+      const response = await fetch(`http://localhost:8080/users`)
+      if (!response.ok) {
+        const responseData = await response.json();
+        throw new Error(responseData.error)
+      }
+      setLoading(false)
+      const userData = await response.json();
+      setUsers(userData)
+      setMessage(null)
+    } catch (error) {
+      setLoading(false)
+      console.error("Error fetching users: ", error)
+      setMessage("Error fetching users: " + error.message)
+    }
   }
 
   const handleInputChange = event => {
@@ -33,33 +57,55 @@ const App = () => {
 
   const submitNewUser = async (event) => {
     event.preventDefault();
-    const response = await fetch('http://localhost:8080/users', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: currentUser,
-    })
-    response
-      .json()
-      .then(result => setUsers(result))
-      .catch(e => console.log(e))
 
-    setCurrentUser(initialFormState)
+    if (!currentUser.name.trim() || !currentUser.email.trim()) {
+      setMessage("Both Name and email ID are required.");
+      return;
+    }
+    // console.log(currentUser)
+    try {
+      const response = await fetch('http://localhost:8080/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(currentUser),
+      })
+      if(!response.ok) {
+        const responseData = await response.json();
+        throw new Error(responseData.error)
+      }
+      const data = await response.text();
+      fetchUsers()
+      setCurrentUser(initialFormState)
+      setTimeout(()=>{
+        setMessage(data)
+      }, 100)
+    } catch (error) {
+      console.error("Error creating user: ", error)
+      setMessage("Error creating user: " + error.message)
+    }
   }
 
   const deleteUser = async (item) => {
-
-    const response = await fetch(`http://localhost:8080/users/${item.id}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
-    response
-      .json()
-      .then(result => setUsers(result), fetchUsers())
-      .catch(e => console.log(e))
+    try {
+      const response = await fetch(`http://localhost:8080/users/${item.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+      if(!response.ok) {
+        const responseData = await response.json();
+        throw new Error(responseData.error)
+      }
+      const responseData = await response.text()
+      setUsers(users.filter(user => user.id !== item.id))
+      setMessage(responseData)
+    } catch (error) {
+      console.error("Error deleting user: ", error)
+      setMessage("Error deleting user: " + error.message)
+    }
   }
 
   const editUser = item => {
@@ -71,31 +117,42 @@ const App = () => {
   const submitUserEdit = async (event) => {
     event.preventDefault()
 
-
-    const response = await fetch(`http://localhost:8080/users/${currentUser.id}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(currentUser),
-    })
-    response
-      .json()
-      .then(result => setUsers(result))
-      .catch(e => console.log(e))
-
-    fetchUsers()
-    setCurrentUser(initialFormState)
-    setEditing(false)
-
+    try {
+      const response = await fetch(`http://localhost:8080/users/${currentUser.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(currentUser),
+      })
+      console.log("response sending",response, currentUser)
+      if (!response.ok) {
+        console.log("response not ok",response)
+        throw new Error("Failed to update user");
+      }
+      fetchUsers()
+      const responseData = await response.text();
+      setCurrentUser(initialFormState)
+      setEditing(false)
+      setTimeout(()=>{
+        setMessage(responseData)
+      },100)
+    } catch (error) {
+      console.error('Error updating user: ', error)
+      setMessage('Error updating user: ' + error.message)
+    }
   }
+
+  const totalPages = Math.ceil(users.length/ itemsPerPage) || 1
 
   return (
     <div className="container">
       <h1>Full Stack Assignment</h1>
       <h5>Basic CRUD Opreations</h5>
 
-      <div className="flex-row">
+      {message && <div className="error">{message}</div>}
+      { loading ? ( <p>Loading....</p>
+      ) : (<div className="flex-row">
         {editing ?
           <div className="flex-large">
             <EditUserForm
@@ -121,10 +178,18 @@ const App = () => {
                 <th>Name</th>
                 <th>Email</th>
                 <th>Actions</th>
+                <th>
+                    <span>Items per page:</span>
+                    <select value={itemsPerPage} onChange={(e) => setItemsPerPage(parseInt(e.target.value))}>
+                      {[...Array(10).keys()].map((number) => (
+                        <option key={number + 1} value={number + 1}>{number + 1}</option>
+                      ))}
+                    </select>
+                  </th>
               </tr>
             </thead>
             <tbody>
-              {users.map(item =>
+              {users?.slice((currentPage-1)*itemsPerPage, currentPage * itemsPerPage).map(item =>
                 <tr key={item.id}>
                   <td>{item.name}</td>
                   <td>{item.email}</td>
@@ -136,8 +201,18 @@ const App = () => {
               )}
             </tbody>
           </table>
+
+          <div>
+            <button onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage === 1}>
+              Previous
+            </button>
+            <span>Page {currentPage}</span>
+            <button onClick={() => setCurrentPage(currentPage + 1)} disabled={currentPage === totalPages}>
+              Next
+            </button>
+          </div>
         </div>
-      </div>
+      </div>) }
     </div>
   );
 }

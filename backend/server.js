@@ -5,8 +5,12 @@ const port = 8080
 const db = require('./queries')
 const cors = require("cors")
 
+const corsOptions = {
+  origin: "http://localhost:3000"
+}
+
+app.use(cors(corsOptions))
 app.use(bodyParser.json())
-app.use(cors())
 app.use(
   bodyParser.urlencoded({
     extended: true,
