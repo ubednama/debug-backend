@@ -19,6 +19,24 @@ pool.connect((err, client, release) => {
   release()
 })
 
+const createUsersTable = async () => {
+  try {
+    const query = `
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL
+      );
+    `;
+    await pool.query(query);
+    console.log('Users table created successfully');
+  } catch (error) {
+    console.error('Error creating users table:', error);
+  }
+};
+
+createUsersTable();
+
 // Our first endpoint will be a GET request. 
 // /user
 // SELECT all users and order by id.
